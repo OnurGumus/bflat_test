@@ -1,0 +1,43 @@
+# Build output
+bin/
+obj/
+
+# Binaries (Linux)
+Minimal
+Tiny
+Arena
+Collections
+VirtualTest
+Program
+HeapDemo
+LongString
+
+# Binaries (Windows)
+*.exe
+
+# bflat download
+bflat-*/
+bflat.tar.gz
+bflat.zip
+
+# Debug files
+*.dwo
+*.pdb
+*.o
+*.obj
+
+# Build artifacts
+*.mstat
+*.dgml
+*.dll
+*.map
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# OS
+.DS_Store
+Thumbs.db
