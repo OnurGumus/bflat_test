@@ -1,0 +1,50 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Minimal",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/bin/Minimal",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "build-minimal"
+        },
+        {
+            "name": "Debug Tiny",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/bin/Tiny",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "build-tiny"
+        },
+        {
+            "name": "Debug Arena",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/bin/Arena",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "build-arena"
+        },
+        {
+            "name": "Debug Collections",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/bin/Collections",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "build-collections"
+        },
+        {
+            "name": "Debug VirtualTest",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/bin/VirtualTest",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "build-virtualtest"
+        }
+    ]
+}

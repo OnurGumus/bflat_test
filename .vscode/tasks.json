@@ -1,0 +1,74 @@
+{
+    "version": "2.0.0",
+    "options": {
+        "env": {
+            "PATH": "${env:HOME}/Downloads/bflat-10.0.0-rc.1-linux-glibc-x64:${env:PATH}"
+        }
+    },
+    "tasks": [
+        {
+            "label": "build-all",
+            "type": "shell",
+            "command": "./build.sh",
+            "windows": {
+                "command": "powershell",
+                "args": ["-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/build.ps1"]
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "build-minimal",
+            "type": "shell",
+            "command": "mkdir -p bin && bflat build Minimal.cs --stdlib:zero -o bin/Minimal",
+            "windows": {
+                "command": "if not exist bin mkdir bin && bflat build Minimal.cs --stdlib:zero -o bin\\Minimal.exe"
+            },
+            "group": "build",
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "build-tiny",
+            "type": "shell",
+            "command": "mkdir -p bin && bflat build Tiny.cs --stdlib:zero -Os --no-pie -o bin/Tiny && strip bin/Tiny",
+            "windows": {
+                "command": "if not exist bin mkdir bin && bflat build Tiny.cs --stdlib:zero -Os -o bin\\Tiny.exe"
+            },
+            "group": "build",
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "build-arena",
+            "type": "shell",
+            "command": "mkdir -p bin && bflat build Arena.cs --stdlib:zero -o bin/Arena",
+            "windows": {
+                "command": "if not exist bin mkdir bin && bflat build Arena.cs --stdlib:zero -o bin\\Arena.exe"
+            },
+            "group": "build",
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "build-collections",
+            "type": "shell",
+            "command": "mkdir -p bin && bflat build Collections.cs --stdlib:zero -o bin/Collections",
+            "windows": {
+                "command": "if not exist bin mkdir bin && bflat build Collections.cs --stdlib:zero -o bin\\Collections.exe"
+            },
+            "group": "build",
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "build-virtualtest",
+            "type": "shell",
+            "command": "mkdir -p bin && bflat build VirtualTest.cs --stdlib:zero -o bin/VirtualTest",
+            "windows": {
+                "command": "if not exist bin mkdir bin && bflat build VirtualTest.cs --stdlib:zero -o bin\\VirtualTest.exe"
+            },
+            "group": "build",
+            "problemMatcher": "$msCompile"
+        }
+    ]
+}
