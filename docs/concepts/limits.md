@@ -224,7 +224,9 @@ static void PrintArea<T>(in T shape) where T : struct, IArea<T>
   names them with `-m`.
 - **Some platforms.** zerocore runs on Linux (x64, arm64), macOS on Apple Silicon, Windows x64,
   WebAssembly and DOS. Not on Windows on arm64 or Intel Macs. And Windows programs are built from
-  Linux or macOS: building *on* Windows (`build.ps1`) is untested and uses bflat's zerolib.
+  Linux or macOS: building *on* Windows (`build.ps1`) is untested and uses bflat's zerolib. The .NET
+  SDK packages ([Install with dotnet](../get-started/install-with-dotnet.html)) build on Linux only,
+  for Linux x64, Linux arm64 and Windows x64; macOS, WebAssembly and DOS need the repository.
 
 `zerocore/README.md` has the full list.
 

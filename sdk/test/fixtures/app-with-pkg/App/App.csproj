@@ -1,0 +1,8 @@
+<Project Sdk="ZeroCSharp.Sdk/@ZERO_SDK_VERSION@">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="ZeroTest.Geometry" Version="1.0.0" />
+  </ItemGroup>
+</Project>

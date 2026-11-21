@@ -22,6 +22,7 @@
 # needs neither bflat nor Docker: that is how CI's macOS job works.
 #
 # Usage:  ./build.sh [--wasm | --dos | --win | --mac] [Sample ...]     default: all samples
+#         ./build.sh --sdk-payload <dir>     what the ZeroCSharp.Sdk package carries (sdk/)
 # Env:    BFLAT_DIR, BFLAT_FORK, BFLAT_ARCH, WASM_TOOLS, DOS_CLANG (see env.sh)
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -454,6 +455,25 @@ build_mac_link() {
     done
 }
 
+# ---- The SDK's payload -------------------------------------------------------
+#
+# What the ZeroCSharp.Sdk package (sdk/) carries, so that users build without
+# this repository: zerocore and lib/ as IL assemblies, zerocore's assembly
+# routines for each Linux architecture, and win/runtime.c and the Windows
+# routines as COFF objects. $1: the payload directory.
+build_sdk_payload() {
+    local dir=$1 arch
+    check_bflat
+    build_core "$CORE"
+    build_lib
+    mkdir -p "$dir/ref"
+    cp "$CORE" "$LIB" "$dir/ref/"
+    for arch in x64 arm64; do
+        mkdir -p "$dir/native/linux-$arch"
+        BFLAT_ARCH=$arch CORE_NATIVE=$dir/native/linux-$arch/zerocore.o build_core_native
+    done
+}
+
 # Internal entry points used inside the container.
 if [ "${1:-}" = "--native-dos-bitcode" ]; then
     shift
@@ -480,6 +500,11 @@ if [ "${1:-}" = "--native-win" ]; then
     build_win "$@"
     exit 0
 fi
+if [ "${1:-}" = "--native-sdk-payload" ]; then
+    shift
+    build_sdk_payload "$@"
+    exit 0
+fi
 if [ "${1:-}" = "--native-wasm" ]; then
     shift
     build_wasm "$@"
@@ -492,6 +517,10 @@ case "${1:-}" in
     --dos)  TARGET=dos; shift ;;
     --win)  TARGET=win; shift ;;
     --mac)  TARGET=mac; shift ;;
+    --sdk-payload)
+        TARGET=sdk-payload
+        PAYLOAD_DIR=${2:?--sdk-payload needs a directory, inside this one}
+        shift 2 ;;
 esac
 
 if [ $# -eq 0 ]; then
@@ -545,6 +574,23 @@ else
 fi
 
 case "$TARGET" in
+    sdk-payload)
+        if ! WIN_CLANG=$(find_dos_clang); then
+            echo "Error: no clang that can compile for x86 Windows. Install clang (Xcode's works)." >&2
+            exit 1
+        fi
+        rm -rf "$PAYLOAD_DIR"
+        mkdir -p "$PAYLOAD_DIR/native/win-x64"
+        run sdk-payload "$PAYLOAD_DIR"
+        build_win_objects "$WIN_CLANG"
+        cp "$WIN_OBJ/runtime.obj" "$WIN_OBJ/zerocore.obj" "$PAYLOAD_DIR/native/win-x64/"
+        {
+            echo "zero-csharp $(git rev-parse HEAD)"
+            # BFLAT_COMMIT when the layouts came without their checkout (CI's cache).
+            echo "bflat ${BFLAT_COMMIT:-$(git -C "${BFLAT_FORK:-../bflat}" rev-parse HEAD 2>/dev/null || echo unknown)}"
+        } > "$PAYLOAD_DIR/VERSIONS.txt"
+        exit 0
+        ;;
     wasm)   run wasm "$@" ;;
     native)
         if [ "$(uname -s)" = Darwin ]; then in_container --native "$@"; else build_native "$@"; fi ;;

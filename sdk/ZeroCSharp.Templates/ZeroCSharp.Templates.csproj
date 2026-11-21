@@ -1,0 +1,37 @@
+<!-- Packs dotnet new zero and zerolib (content/). pack.sh fills in the SDK
+     version first (obj/content). No code. -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../version.props" />
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+
+    <PackageId>ZeroCSharp.Templates</PackageId>
+    <Version>$(ZeroSdkVersion)</Version>
+    <PackageType>Template</PackageType>
+    <Authors>Zero C# contributors</Authors>
+    <Description>dotnet new zero (a native program) and dotnet new zerolib (a library) for zero-mode C#: C# compiled to small native programs with no .NET runtime.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://onurgumus.github.io/zero-csharp/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/OnurGumus/zero-csharp</RepositoryUrl>
+    <PackageTags>dotnet-new;templates;csharp;native;zero</PackageTags>
+    <ZeroContent>$(BaseIntermediateOutputPath)content/</ZeroContent>
+  </PropertyGroup>
+  <!-- The content with the SDK version filled in. -->
+  <Target Name="ZeroStageContent" BeforeTargets="_GetPackageFiles">
+    <ItemGroup>
+      <_ZeroTemplateFile Include="content/**" />
+    </ItemGroup>
+    <RemoveDir Directories="$(ZeroContent)" />
+    <Copy SourceFiles="@(_ZeroTemplateFile)" DestinationFiles="@(_ZeroTemplateFile->'$(ZeroContent)%(RecursiveDir)%(Filename)%(Extension)')" />
+    <WriteLinesToFile File="$(ZeroContent)%(_ZeroTemplateFile.RecursiveDir)%(_ZeroTemplateFile.Filename)%(_ZeroTemplateFile.Extension)"
+                      Lines="$([System.IO.File]::ReadAllText('%(_ZeroTemplateFile.FullPath)').Replace('@ZERO_SDK_VERSION@', '$(ZeroSdkVersion)'))"
+                      Overwrite="true" Condition="'%(_ZeroTemplateFile.Extension)' == '.csproj'" />
+    <ItemGroup>
+      <None Include="$(ZeroContent)**" Pack="true" PackagePath="content/" />
+    </ItemGroup>
+  </Target>
+</Project>

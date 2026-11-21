@@ -1,6 +1,6 @@
 ---
 title: Your first program
-index: 2
+index: 3
 ---
 
 # Your first program

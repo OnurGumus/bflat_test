@@ -1,0 +1,32 @@
+<!--
+  Packs a trimmed bflat layout (sdk/trim-layout.sh) for one host as
+  ZeroCSharp.Bflat.<rid>. ZeroCSharp.Sdk downloads the one for the machine
+  it runs on and runs tools/bflat/bflat. No code.
+
+  dotnet pack -p:HostRid=linux-x64 -p:LayoutDir=(a trimmed layout).-p:BflatCommit=<fork commit>
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../version.props" />
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <NoWarn>$(NoWarn);NU5100;NU5128</NoWarn>
+
+    <PackageId>ZeroCSharp.Bflat.$(HostRid)</PackageId>
+    <Version>$(ZeroSdkVersion)</Version>
+    <Authors>Zero C# contributors</Authors>
+    <Description>bflat (OnurGumus/bflat fork), trimmed to what Zero C# builds use, for $(HostRid) hosts. Downloaded by ZeroCSharp.Sdk; not referenced directly.</Description>
+    <PackageLicenseExpression>AGPL-3.0-only</PackageLicenseExpression>
+    <PackageProjectUrl>https://onurgumus.github.io/zero-csharp/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/OnurGumus/bflat</RepositoryUrl>
+    <RepositoryCommit>$(BflatCommit)</RepositoryCommit>
+  </PropertyGroup>
+  <Target Name="CheckInputs" BeforeTargets="Build">
+    <Error Condition="'$(HostRid)' == '' or !Exists('$(LayoutDir)/bflat')" Text="Pass -p:HostRid=linux-x64|linux-arm64 and -p:LayoutDir=(a trimmed layout)." />
+  </Target>
+  <ItemGroup>
+    <None Include="$(LayoutDir)/**" Pack="true" PackagePath="tools/bflat/" />
+  </ItemGroup>
+</Project>

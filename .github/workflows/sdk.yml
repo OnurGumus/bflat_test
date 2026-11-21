@@ -1,0 +1,257 @@
+# The Zero C# packages (sdk/): builds them, tests them on clean machines with
+# only the .NET SDK installed, and publishes them to nuget.org on a tag
+# sdk-v<version>.
+#
+#   bflat    the fork's layouts, cached (as in test.yml, same cache key)
+#   payload  zerocore, lib/ and the link objects (./build.sh --sdk-payload)
+#   trim     each host's layout, trimmed on that host (sdk/trim-layout.sh)
+#   pack     the four packages (sdk/pack.sh), uploaded as the "feed" artifact
+#   test     sdk/test/run.sh against the feed: Ubuntu 24.04 x64 and arm64,
+#            Ubuntu 22.04, Debian 12 and Fedora in containers, the newest
+#            .NET SDK, and macOS (what works there without a native step)
+#   publish  on a tag sdk-v*: dotnet nuget push, by trusted publishing (below)
+name: SDK
+
+on:
+  push:
+    branches: [master]
+    tags: ['sdk-v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read # the fork's build restores packages from GitHub Packages
+
+jobs:
+  bflat:
+    runs-on: ubuntu-22.04
+    outputs:
+      key: ${{ steps.fork.outputs.key }}
+      commit: ${{ steps.fork.outputs.commit }}
+    steps:
+      - name: Find the fork's current commit
+        id: fork
+        run: |
+          commit=$(git ls-remote https://github.com/OnurGumus/bflat refs/heads/master | cut -f1)
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "key=bflat-layouts-$commit" >> "$GITHUB_OUTPUT"
+      - name: Restore bflat from the cache
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            bflat/layouts/linux-glibc-x64
+            bflat/layouts/linux-glibc-arm64
+          key: ${{ steps.fork.outputs.key }}
+          lookup-only: true
+      - name: Check out the fork
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: OnurGumus/bflat
+          ref: master
+          path: bflat
+      - name: Set up .NET
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build bflat
+        if: steps.cache.outputs.cache-hit != 'true'
+        working-directory: bflat
+        env:
+          PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd src/bflat
+          dotnet nuget add source --username USERNAME --password "$PACKAGES_TOKEN" --store-password-in-clear-text \
+            --name github "https://nuget.pkg.github.com/bflattened/index.json"
+          cd ../..
+          dotnet build src/bflat/bflat.csproj -t:BuildLayouts -c:Release
+      - name: Save bflat to the cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            bflat/layouts/linux-glibc-x64
+            bflat/layouts/linux-glibc-arm64
+          key: ${{ steps.fork.outputs.key }}
+
+  payload:
+    needs: bflat
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: zero-csharp
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            bflat/layouts/linux-glibc-x64
+            bflat/layouts/linux-glibc-arm64
+          key: ${{ needs.bflat.outputs.key }}
+          fail-on-cache-miss: true
+      - name: Install the assemblers and clang
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends binutils binutils-aarch64-linux-gnu clang
+      - name: Build the payload
+        working-directory: zero-csharp
+        env:
+          BFLAT_DIR: ${{ github.workspace }}/bflat/layouts/linux-glibc-x64
+          BFLAT_COMMIT: ${{ needs.bflat.outputs.commit }}
+        run: ./build.sh --sdk-payload sdk/ZeroCSharp.Sdk/payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: payload
+          path: zero-csharp/sdk/ZeroCSharp.Sdk/payload
+
+  trim:
+    needs: [bflat, payload]
+    strategy:
+      matrix:
+        include:
+          - { rid: linux-x64, arch: x64, runner: ubuntu-24.04 }
+          - { rid: linux-arm64, arch: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: zero-csharp
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            bflat/layouts/linux-glibc-x64
+            bflat/layouts/linux-glibc-arm64
+          key: ${{ needs.bflat.outputs.key }}
+          fail-on-cache-miss: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: payload
+          path: zero-csharp/sdk/ZeroCSharp.Sdk/payload
+      - name: Trim the layout
+        working-directory: zero-csharp
+        run: sdk/trim-layout.sh ../bflat/layouts/linux-glibc-${{ matrix.arch }} sdk/trimmed/${{ matrix.rid }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trimmed-${{ matrix.rid }}
+          path: zero-csharp/sdk/trimmed/${{ matrix.rid }}
+
+  pack:
+    needs: trim
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/download-artifact@v4
+        with:
+          name: payload
+          path: sdk/ZeroCSharp.Sdk/payload
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: trimmed-*
+          path: sdk/trimmed
+      - name: Pack
+        run: |
+          for d in sdk/trimmed/trimmed-*; do mv "$d" "sdk/trimmed/${d#sdk/trimmed/trimmed-}"; done
+          ZERO_PAYLOAD_PREBUILT=1 sdk/pack.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: feed
+          path: sdk/feed
+
+  # Runners come with a lot installed, so the containers are the clean test:
+  # only the .NET SDK (dotnet-install.sh) and what the test script itself uses.
+  test:
+    needs: pack
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: ubuntu-24.04 x64, runner: ubuntu-24.04, dotnet: '10.0.x' }
+          - { name: ubuntu-24.04 arm64, runner: ubuntu-24.04-arm, dotnet: '10.0.x' }
+          - { name: newest .NET SDK, runner: ubuntu-24.04, dotnet: '11.0.x', quality: preview }
+          - { name: ubuntu-22.04 container, runner: ubuntu-24.04, container: 'ubuntu:22.04' }
+          - { name: debian-12 container, runner: ubuntu-24.04, container: 'debian:12' }
+          - { name: fedora-41 container, runner: ubuntu-24.04, container: 'fedora:41' }
+    name: test (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container }}
+    steps:
+      - name: Install the test script's tools, and .NET in containers
+        if: matrix.container != ''
+        run: |
+          if command -v dnf > /dev/null; then
+            dnf install -y -q curl file binutils unzip zip findutils libicu tar gzip
+          else
+            apt-get update -qq && apt-get install -y -qq curl ca-certificates file binutils unzip zip libicu-dev
+          fi
+          curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0 --install-dir /usr/share/dotnet
+          ln -s /usr/share/dotnet/dotnet /usr/local/bin/dotnet
+      - uses: actions/setup-dotnet@v4
+        if: matrix.container == ''
+        with:
+          dotnet-version: ${{ matrix.dotnet }}
+          dotnet-quality: ${{ matrix.quality || 'ga' }}
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: payload
+          path: sdk/ZeroCSharp.Sdk/payload
+      - uses: actions/download-artifact@v4
+        with:
+          name: feed
+          path: sdk/feed
+      - name: Test
+        env:
+          ZERO_NO_PACK: '1'
+        run: dotnet --version && sdk/test/run.sh
+
+  macos:
+    needs: pack
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/download-artifact@v4
+        with:
+          name: payload
+          path: sdk/ZeroCSharp.Sdk/payload
+      - uses: actions/download-artifact@v4
+        with:
+          name: feed
+          path: sdk/feed
+      - name: Test (no native step on macOS)
+        env:
+          ZERO_NO_PACK: '1'
+        run: sdk/test/run.sh
+
+  # Trusted publishing: nuget.org trusts this workflow (a policy on the
+  # package owner's account: owner OnurGumus, repository zero-csharp,
+  # workflow sdk.yml), and NuGet/login trades GitHub's OIDC token for a key
+  # that lives an hour. No API key is stored. vars.NUGET_USER is the
+  # nuget.org user name (a repository variable, not a secret).
+  publish:
+    if: startsWith(github.ref, 'refs/tags/sdk-v')
+    needs: [test, macos]
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: feed
+          path: feed
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Log in to nuget.org
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER }}
+      - name: Push to nuget.org
+        run: dotnet nuget push "feed/*.nupkg" --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate

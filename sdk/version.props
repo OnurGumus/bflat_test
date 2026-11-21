@@ -1,0 +1,8 @@
+<!-- The version of the Zero C# packages. All four share it. Projects target
+     zero<major><minor> (0.1 -> zero01): a library package built with another
+     major.minor has another framework name, and NuGet refuses it. -->
+<Project>
+  <PropertyGroup>
+    <ZeroSdkVersion>0.1.0</ZeroSdkVersion>
+  </PropertyGroup>
+</Project>

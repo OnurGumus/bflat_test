@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Zero C# contributors",
+  "classifications": ["Console", "Native"],
+  "identity": "ZeroCSharp.Templates.Program",
+  "name": "Zero C# program",
+  "description": "A native program in zero-mode C#: no .NET runtime, no garbage collector.",
+  "shortName": "zero",
+  "sourceName": "ZeroApp1",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" }
+}

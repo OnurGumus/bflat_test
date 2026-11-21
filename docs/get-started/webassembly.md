@@ -1,6 +1,6 @@
 ---
 title: Run it on WebAssembly
-index: 3
+index: 4
 ---
 
 # Run it on WebAssembly

@@ -1,0 +1,214 @@
+# Zero C# as a .NET project SDK: design
+
+Date: 2026-11-21. Status: reviewed, for approval.
+
+## Intent
+
+Today, building a zero-mode program means cloning this repository and running `build.sh`, which drives
+a bflat fork (on macOS, inside Docker) against zerocore and `lib/` built from source. The goal is that
+someone who has never seen the repository can do this:
+
+```bash
+dotnet new install ZeroCSharp.Templates
+dotnet new zero -o Hello
+cd Hello
+dotnet build                      # bin/.../Hello: a native program, no .NET runtime
+dotnet build -p:ZeroTarget=win-x64
+```
+
+and get the same programs `build.sh` makes, with their editor (VS Code, Rider, Visual Studio)
+understanding the code: no false errors for `Out`, `Arena` or C# 15 unions, and real errors for things
+zero mode doesn't have, such as `Console`.
+
+Libraries follow the same model: a library is a project of its own, it builds to an IL `.dll`, other
+projects use it through `<ProjectReference>`, and `dotnet pack` turns it into a NuGet package that
+anyone can reference with `<PackageReference>`. The how-to guide "Create a reusable library" is
+rewritten around this (project, `.dll`, package) once the SDK exists.
+
+## Goals
+
+- `dotnet new zero` + `dotnet build` produce a native executable, with nothing installed beyond the
+  .NET 10 SDK.
+- Editors see exactly what zero mode has: zerocore and `lib/` as the only framework, C# 15 (preview)
+  with the updated memory-safety rules.
+- Library projects, `<ProjectReference>` between them, and `dotnet pack` for libraries.
+- Hosts (the machine running `dotnet build`): Linux x64 and Linux arm64, on current distributions
+  (Ubuntu 22.04 and 24.04, Debian 12, Fedora): no extra system packages. Windows x64 as a host is the
+  next release (0.2), with its own CI runner. *(The user's decision.)*
+- Targets (what gets built): linux-x64, linux-arm64, win-x64, from any supported host.
+- Published to nuget.org from CI, with CI proving the published-shape packages work on a clean machine.
+
+## Non-goals (v1)
+
+- Windows as a host (0.2). Linux hosts still build Windows programs.
+- macOS as a host. bflat doesn't run on macOS; Mac users keep using the repository (Docker). A Mac host
+  is a later project (a macOS build of the fork).
+- macOS, WebAssembly and DOS as targets. macOS needs Apple's linker; WebAssembly and DOS need about
+  745 MB of extra toolchains. A later release can download them on first use.
+- A single-file `zero build Hello.cs` command. It can come later from the same packages.
+- Changing how this repository builds its own samples: `build.sh`, `libs/` and the tests stay.
+
+## Anti-goals
+
+- A zero-mode project silently using ordinary .NET packages. A `<PackageReference>` to a normal
+  NuGet library (built against .NET's `System.Runtime`) must fail clearly at restore or compile
+  time, not produce a binary that crashes or a wall of bflat errors.
+- Editor and build disagreeing: code that the editor accepts must build, and vice versa, apart from
+  bflat-only checks (variance and similar, which are run-time aborts anyway).
+- Any network access during `dotnet build` beyond NuGet restore.
+- Shipping the full 548 MB layout.
+
+## Constraints and facts already established
+
+- The bflat fork (OnurGumus/bflat, AGPL-3.0) compiles with Roslyn 5.12.0
+  (`Microsoft.CodeAnalysis.CSharp` 5.12.0 in `src/bflat/bflat.csproj`). `Microsoft.Net.Compilers.Toolset`
+  5.12.0 exists on nuget.org, so the SDK can pin the same compiler for `dotnet build` and design-time
+  builds.
+- bflat compiles C# source files; it doesn't take an IL `.dll` of the program as input. It does take
+  library `.dll`s with `-r` (that's how `lib/` works today).
+- A zero-mode build is: zerocore compiled to `System.Private.CoreLib.dll` (`build-il -O --stdlib:none
+  --langversion preview`; no defines for native targets), `lib/` compiled to `BflatLib.dll`
+  (`build-il -O --target Shared --stdlib:none -r <core>` plus `--langversion preview
+  --compiler-feature updated-memory-safety-rules`), then per program `bflat build <sources> -r <libs>
+  -r <core> --stdlib:none <C# flags> --no-reflection -i libc -i libm.so.6 --arch <a> [--os windows]`
+  with per-target link inputs:
+  - linux-arm64: `--ldflags zerocore-arm64.o` (+ `-z max-page-size=4096`)
+  - linux-x64: `--ldflags zerocore-x64.o`
+  - win-x64: `--os windows --ldflags "/entry:zero_start runtime.obj zerocore.obj"` (from
+    `win/runtime.c` and `zerocore/native/win-x64.S`, compiled with clang)
+  `build.sh` is the reference for every flag.
+- Measured: a zero-mode build touches 79 files of the Linux arm64 layout. Copied out and stripped,
+  they are 107 MB (bflat 33 MB, lld 47 MB), 42 MB gzipped, under nuget.org's 250 MB package limit.
+  That trimmed copy built Strings, Llama, Shapes and Threads for linux-arm64, linux-x64, win-x64 and
+  the macOS compile step, and the Linux arm64 programs ran correctly. The file list is the output of
+  tracing (`strace`) a build; it must be regenerated by a script, not hand-kept. The Windows-host
+  layout (`windows-x64`, 582 MB) hasn't been measured or tested.
+- bflat's bundled linker (`bin/lld`) needs `libtinfo5`, which Ubuntu 24.04 and other current
+  distributions no longer ship; CI pins `ubuntu-22.04` and installs it. The user chose to fix this in
+  the fork's layout build (a linker without that dependency, e.g. built without terminfo or linked
+  statically), so the package works on current distributions with nothing extra. This is work in the
+  bflat repository, in scope for v1.
+- Per-sample `-m` flags exist (`-m x86-64-v3` / `-m dotprod` for SIMD); the SDK exposes them as a
+  property.
+
+## Approaches considered
+
+- **A. Project SDK; `dotnet build` makes the native program (chosen).** A project starts with
+  `<Project Sdk="ZeroCSharp.Sdk/x.y.z">`. The SDK replaces .NET's framework references with zerocore
+  and `lib/`, pins the compiler, and after the normal compile runs bflat on the project's sources.
+  One command, standard project features (`ProjectReference`, `pack`, editors) work.
+- B. A project file for the editor only, plus a `zero` .NET tool that builds. Simpler MSBuild, but
+  two commands, and `dotnet build` alone makes nothing useful.
+- C. A `zero` tool wrapping everything (`zero new`, `zero build`). The most work for the least gain
+  over A.
+
+The user picked A, and asked that libraries be about `.csproj` and `.dll` (references and packages)
+rather than the repository's `libs/` folder convention.
+
+## Design (decided)
+
+### Packages
+
+1. **ZeroCSharp.Sdk**: an MSBuild project SDK (`Sdk/Sdk.props`, `Sdk/Sdk.targets`). It carries:
+   - the prebuilt reference set: zerocore's `System.Private.CoreLib.dll` and `lib/`'s `BflatLib.dll`;
+   - the prebuilt per-target link inputs: `zerocore-x64.o`, `zerocore-arm64.o`, and for win-x64
+     `runtime.obj` and `zerocore.obj`;
+   - the MSBuild logic.
+   Its version pins all of the above together with the bflat package version and the compiler version.
+2. **ZeroCSharp.Bflat.linux-x64** and **ZeroCSharp.Bflat.linux-arm64** (win-x64 in 0.2): the
+   trimmed, stripped bflat layout for each host, AGPL-3.0, with a pointer to the fork's source at the
+   matching commit. Pulled by the SDK during restore for the current host only (e.g. via
+   `<PackageDownload>`), never referenced as a compile dependency.
+3. **ZeroCSharp.Templates**: `dotnet new zero` (console program) and `dotnet new zerolib` (library).
+
+### What the SDK does
+
+- Design time and compile: no implicit framework references, no standard library
+  (`DisableImplicitFrameworkReferences`, `NoStdLib`, `NoCompilerStandardLib` or equivalents), with
+  references to the two `.dll`s above; `LangVersion=preview`;
+  `Features=updated-memory-safety-rules`; `AllowUnsafeBlocks=true`; the compiler pinned to 5.12.0.
+  The normal compile still runs: it gives the same errors the editor shows, and for a library its
+  output `.dll` is the artifact.
+- Executables (`OutputType=Exe`): after the compile, a target runs the host's bflat on the project's
+  `@(Compile)` items, with `-r` for the SDK's reference set and for every referenced zero library's
+  `.dll` (from `ProjectReference` and `PackageReference`), the per-target link inputs, and the flags
+  above. Output goes to the usual output folder as `<AssemblyName>` (Linux) or `<AssemblyName>.exe`
+  (Windows). Incremental: skipped when inputs are unchanged.
+- Properties: `ZeroTarget` (`linux-x64`, `linux-arm64`, `win-x64`; default: the host's own),
+  `ZeroInstructionSet` (passed as `-m`), `ZeroOptimizeFor` (`Speed`, the default, or `Size`, which
+  passes `-Os`), `ZeroDllImports` (extra `-i` libraries; default `libc` and `libm.so.6`). The native
+  build is optimized in Debug and Release alike: zero mode has no debugger story to protect, and
+  `build.sh` always optimizes. *(Builder's call, settled in review.)*
+- Unsupported hosts (macOS in v1): everything except the native step works there, namely restore
+  (without a bflat package), the compile to IL, editor support, library projects and `dotnet pack`.
+  Building an executable stops with one clear error: "Zero C# can't make native programs on macOS
+  yet; build on Linux or Windows, or use the repository's build.sh". The repository's author works
+  on a Mac, so this matters. *(Settled in review.)*
+- When bflat fails, its output is surfaced as MSBuild errors, with file and line where bflat gives
+  them.
+
+### Libraries
+
+- A library is a project with the SDK and `OutputType=Library`. Its compile output is the IL `.dll`,
+  built with optimization on (the `-O` lesson from `build.sh`).
+- `ProjectReference` from a program or another library works as in any .NET project.
+- `dotnet pack` produces a NuGet package of the `.dll`; a zero project consumes it with
+  `PackageReference`. The package must be marked so that only zero projects can use it, and zero
+  projects can use only such packages (see the anti-goal); the mechanism is left to the builder
+  below, but it must hold.
+- Compatibility: a library package records the SDK version it was built with. A project accepts it
+  only when the major and minor versions match its own SDK's (0.1.x with 0.1.x); otherwise the build
+  stops with one error naming both versions. zerocore is the core library, so a library built against
+  another version can reference members that don't exist. Looser promises can come after 1.0.
+  *(Settled in review.)*
+
+### Editors
+
+`dotnet build` uses the pinned compiler. Editors' live analysis uses the Roslyn they bundle (C# Dev
+Kit, Rider; Visual Studio partly follows the SDK), so an editor older than Roslyn 5.12 can show false
+errors for C# 15 features. The docs name the editor versions that were checked; CI doesn't test
+editors. *(Settled in review.)*
+
+### Licenses
+
+The SDK and template packages are MIT, like the repository (README, "License"; `zerocore/LICENSE`),
+including `lib/` and the objects from `win/runtime.c`. The bflat packages are AGPL-3.0 and stay
+separate packages, downloaded as tools, never referenced as compile dependencies, so nothing AGPL is
+linked into users' programs. The repository has no root LICENSE file; adding one is part of this
+work. *(Settled in review.)*
+
+### Tests and publishing
+
+- CI builds the packages from this repository (the bflat packages from the fork's layouts,
+  trimmed by the tracing script) and puts them in a local feed. On clean Linux runners it installs
+  the templates, creates a program and a library that uses another library through
+  `ProjectReference` and one through a packed `PackageReference`, builds for every supported target
+  (linux-x64, linux-arm64, win-x64), and runs what the runner can run, checking the output. Clean runners are
+  `ubuntu-24.04` and `ubuntu-24.04-arm`, with no extra packages installed, plus a 22.04 container
+  and a macOS runner that checks the library-and-pack path and the unsupported-host error.
+- Publishing to nuget.org runs on a version tag, by trusted publishing: a policy on the owner's
+  nuget.org account trusts `sdk.yml`, and `NuGet/login` trades GitHub's OIDC token for a short-lived
+  key, so no API key is stored. (Changed from a stored key at the user's request, as nuget.org
+  recommends.)
+
+### Documentation
+
+- Get started gains "Install with dotnet" (templates, `dotnet new zero`, `dotnet build`,
+  `ZeroTarget`), and the landing page's first step points to it, with the repository route kept for
+  macOS, WebAssembly and DOS.
+- "Create a reusable library" is rewritten around library projects, `ProjectReference`, `dotnet pack`
+  and `PackageReference`. The repository's `libs/` convention becomes a short note for people working
+  in the repository.
+
+## Left to the builder
+
+- MSBuild specifics: which properties exactly disable the framework, how the host package is
+  restored (`PackageDownload` or otherwise), how the bflat target hooks in (after `CoreCompile` or
+  `Build`), incremental inputs/outputs.
+- How zero library packages are marked and checked (custom target framework, a package type, a
+  build-time check of references, or a mix), as long as the anti-goal holds.
+- The trimming script (tracing a set of builds in a container, plus stripping), and how it runs in CI.
+- Whether the SDK's prebuilt `.dll`s and objects are built in the same CI run or taken from the
+  existing jobs.
+- Package and file naming beyond the names above, and the version scheme (start at 0.1.0).
+- Whether `lib/`'s assembly keeps the name `BflatLib` inside packages.

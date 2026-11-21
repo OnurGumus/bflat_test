@@ -25,7 +25,9 @@ terms.
 
 ## Where to go
 
-1. [Install](install.html) the bflat fork and check the prerequisites.
+1. [Install with dotnet](install-with-dotnet.html): on Linux, `dotnet new zero` and `dotnet build`
+   make a native program, with nothing to clone. Or [install from the repository](install.html), the
+   bflat fork and its prerequisites, which also builds for macOS, WebAssembly and DOS.
 2. [Build your first program](first-program.html) and run it.
 3. Run the same program [on WebAssembly](webassembly.html) and [on DOS](dos.html).
 

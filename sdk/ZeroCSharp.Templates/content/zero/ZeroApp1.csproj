@@ -1,0 +1,8 @@
+<!-- dotnet build makes ZeroApp1 in bin/Debug/, a native program.
+     dotnet build -p:ZeroTarget=win-x64 makes ZeroApp1.exe for Windows.
+     Guide: https://onurgumus.github.io/zero-csharp/get-started/install-with-dotnet.html -->
+<Project Sdk="ZeroCSharp.Sdk/@ZERO_SDK_VERSION@">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+</Project>

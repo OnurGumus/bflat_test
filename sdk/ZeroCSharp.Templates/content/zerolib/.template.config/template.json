@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Zero C# contributors",
+  "classifications": ["Library", "Native"],
+  "identity": "ZeroCSharp.Templates.Library",
+  "name": "Zero C# library",
+  "description": "A library for zero-mode C# programs: reference it from a project, or pack it with dotnet pack.",
+  "shortName": "zerolib",
+  "sourceName": "ZeroLibrary1",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" }
+}

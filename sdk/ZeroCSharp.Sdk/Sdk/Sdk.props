@@ -1,0 +1,69 @@
+<!--
+  ZeroCSharp.Sdk: zero-mode C# projects. <Project Sdk="ZeroCSharp.Sdk/0.1.0">.
+
+  A project gets a target framework of its own, zero<major><minor> (zero01 for
+  0.1), and compiles against zerocore (the core library, System.Private.CoreLib)
+  and lib/ (BflatLib) instead of .NET's libraries. NuGet then refuses ordinary
+  .NET packages, and packages of zero libraries built with another SDK version
+  (another framework name), with NU1202.
+-->
+<Project>
+  <Import Project="$(MSBuildThisFileDirectory)version.props" />
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+
+  <PropertyGroup>
+    <ZeroSdkRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..'))</ZeroSdkRoot>
+    <ZeroSdkTfm>zero$(ZeroSdkVersion.Split('.')[0])$(ZeroSdkVersion.Split('.')[1])</ZeroSdkTfm>
+
+    <!-- NuGet reads a framework name it doesn't know as name + version 0.0,
+         so the version is part of the name. -->
+    <TargetFramework>$(ZeroSdkTfm)</TargetFramework>
+    <!-- A Directory.Build.props of the repository around the project may set
+         these for its .NET projects; a zero project has one framework and
+         none of .NET's global usings. -->
+    <TargetFrameworks></TargetFrameworks>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TargetFrameworkIdentifier>$(ZeroSdkTfm)</TargetFrameworkIdentifier>
+    <TargetFrameworkVersion>v0.0</TargetFrameworkVersion>
+    <TargetFrameworkMoniker>$(ZeroSdkTfm),Version=v0.0</TargetFrameworkMoniker>
+
+    <!-- No .NET: zerocore and lib/ are the whole framework. -->
+    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+    <NoStdLib>true</NoStdLib>
+    <NoCompilerStandardLib>true</NoCompilerStandardLib>
+    <!-- zerocore has no assembly-info or target-framework attributes. -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+
+    <!-- The language as build.sh compiles it. -->
+    <LangVersion>preview</LangVersion>
+    <Features>$(Features);updated-memory-safety-rules</Features>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- A library's IL is what programs compile from: optimize it, as build.sh's -O does. -->
+    <Optimize>true</Optimize>
+
+    <!-- The compiler's output is IL, always a .dll: the native program built
+         from the same sources takes the plain name (or .exe for Windows). -->
+    <TargetExt>.dll</TargetExt>
+    <UseAppHost>false</UseAppHost>
+
+    <!-- The native step (Sdk.targets). The host is the machine running the
+         build: bflat runs on Linux only in this version. -->
+    <ZeroHostRid Condition="$([MSBuild]::IsOSPlatform('Linux')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">linux-x64</ZeroHostRid>
+    <ZeroHostRid Condition="$([MSBuild]::IsOSPlatform('Linux')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">linux-arm64</ZeroHostRid>
+    <!-- linux-x64, linux-arm64 or win-x64; the host's own by default. -->
+    <ZeroTarget Condition="'$(ZeroTarget)' == ''">$(ZeroHostRid)</ZeroTarget>
+    <!-- Speed (bflat's default) or Size (-Os). The native program is optimized
+         in Debug and Release alike, as build.sh does. -->
+    <ZeroOptimizeFor Condition="'$(ZeroOptimizeFor)' == ''">Speed</ZeroOptimizeFor>
+    <!-- ZeroDllImports: more libraries whose [DllImport]s are bound when the
+         program is linked, besides libc and libm.so.6, which always are. -->
+    <!-- ZeroInstructionSet: passed to bflat as -m (x86-64-v3, dotprod, ...). -->
+
+    <!-- dotnet pack: the dll goes to lib/<framework>/ by a target in Sdk.targets,
+         because NuGet's pack rejects build output for a framework it doesn't know. -->
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <NoWarn>$(NoWarn);NU5103;NU5128</NoWarn>
+  </PropertyGroup>
+</Project>

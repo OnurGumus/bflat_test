@@ -25,8 +25,7 @@ concurrency:
 
 jobs:
   build:
-    # 22.04: bflat's bundled linker needs libtinfo5, which 24.04 doesn't ship.
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -78,7 +77,7 @@ jobs:
           key: wasm-tools-${{ hashFiles('zero-csharp/env.sh') }}
 
       - name: Install what bflat and the build need
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libtinfo5 binutils
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends binutils
 
       - name: Download the WebAssembly tools
         if: steps.wasm-tools.outputs.cache-hit != 'true'

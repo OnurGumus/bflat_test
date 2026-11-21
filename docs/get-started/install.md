@@ -1,6 +1,6 @@
 ---
 title: Install
-index: 1
+index: 2
 ---
 
 # Install
@@ -46,9 +46,9 @@ elsewhere, set `BFLAT_DIR`.
 
 - **macOS:** Docker. bflat is a Linux program, so it runs in a Linux container of your Mac's
   own architecture (native on Apple Silicon), and so do the programs it builds.
-- **Linux:** `libtinfo.so.5`, which bflat's bundled linker needs, and an assembler (`as`, from
-  binutils) for zerocore's assembly routines. On Ubuntu 22.04:
-  `sudo apt install libtinfo5 binutils`. Ubuntu 24.04 no longer ships libtinfo5.
+- **Linux:** an assembler (`as`, from binutils) for zerocore's assembly routines:
+  `sudo apt install binutils`. bflat's linker needs nothing else. (Layouts built before the fork
+  switched to LLVM 20's lld, on 2026-11-21, need `libtinfo.so.5`: rebuild them.)
 - **Windows:** programs for Windows build from Linux or macOS with `./build.sh --win` (see
   [Targets](../concepts/targets.html)), which also needs clang (Xcode's on macOS). Building on a
   Windows machine isn't supported yet: `setup.ps1` and `build.ps1` exist but are untested.

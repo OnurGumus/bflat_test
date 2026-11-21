@@ -42,3 +42,10 @@ docs/reference/
 
 # Python
 __pycache__/
+
+# The Zero C# packages (sdk/): built packages, generated payload, test output.
+sdk/feed/
+sdk/ZeroCSharp.Sdk/payload/
+sdk/test/work/
+sdk/test/work.pack.log
+sdk/trimmed/

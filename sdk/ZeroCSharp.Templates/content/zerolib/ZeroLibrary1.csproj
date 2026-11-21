@@ -1,0 +1,9 @@
+<!-- A zero library: programs reference it with <ProjectReference>, or with
+     <PackageReference> after dotnet pack.
+     Guide: https://onurgumus.github.io/zero-csharp/how-to/create-a-library.html -->
+<Project Sdk="ZeroCSharp.Sdk/@ZERO_SDK_VERSION@">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+</Project>

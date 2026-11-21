@@ -5,16 +5,32 @@ index: 14
 
 # Create a reusable library
 
-Code that several programs need goes in a library: a folder in `libs/`. `build.sh` compiles each
-folder the way it compiles `lib/`, into an IL assembly that every program references. Each program's
-build then compiles the parts it uses into its own binary, so there's nothing to ship next to the
-program, and the same library works on every target. `libs/Geometry` is an example, and
-`samples/Shapes.cs` uses it.
+Code that several programs need goes in a library: a project of its own that builds to an IL `.dll`.
+Programs use it through `<ProjectReference>`, or, once you've packed it with `dotnet pack`, through
+`<PackageReference>` like any NuGet package. Each program's build compiles the parts of the library it
+uses into its own binary, so there's nothing to ship next to the program. This guide uses the .NET SDK
+packages ([Install with dotnet](../get-started/install-with-dotnet.html)); the
+[last section](#in-this-repository) shows the same thing inside this repository.
 
 ## Make the library
 
-Make a folder in `libs/` and put `.cs` files in it. The folder's name is the library's name. A library
-has no `Main`. Give it a namespace of its own, so its names don't collide with a program's:
+```bash
+dotnet new zerolib -o Geometry
+```
+
+The project file names the SDK and says it's a library:
+
+```xml
+<Project Sdk="ZeroCSharp.Sdk/0.1.0">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+</Project>
+```
+
+A library has no `Main`. Give it a namespace of its own, so its names don't collide with a program's.
+These are the types of the example library, `libs/Geometry` in the repository:
 
 <!-- sample: libs/Geometry/Shapes.cs types -->
 ```csharp
@@ -40,11 +56,25 @@ public record struct Rect(double Width, double Height) : IShape
 ```
 
 A library can use everything a program can: zerocore, `lib/` (`Arena`, `List`, `Out` and the rest),
-and the libraries before it in `libs/`.
+and other zero libraries it references. `dotnet build` checks it and makes `Geometry.dll`, optimized:
+programs compile from its IL, so the SDK always optimizes a library, in Debug too.
 
 ## Use it from a program
 
-Every program references every library, so a `using` is all a program needs:
+Reference the library's project:
+
+```xml
+<Project Sdk="ZeroCSharp.Sdk/0.1.0">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Geometry/Geometry.csproj" />
+  </ItemGroup>
+</Project>
+```
+
+Then a `using` is all the code needs:
 
 <!-- sample: samples/Shapes.cs use -->
 ```csharp
@@ -64,12 +94,7 @@ for (int i = 0; i < corners.Count; i++)
 unsafe { arena.Destroy(); } // SAFETY: corners isn't used after this.
 ```
 
-Build and run it as any other program. `build.sh` builds the library first:
-
-```bash
-./build.sh Shapes
-./run.sh Shapes
-```
+`dotnet build` builds the library first, then the program:
 
 ```text
 Floor area: 37.00
@@ -78,32 +103,56 @@ Point { X = 0, Y = 0 }
 Point { X = 4, Y = 0 }
 Point { X = 4, Y = 3 }
 Point { X = 0, Y = 3 }
-PASS Geometry
 ```
 
-The same works with `--win`, `--mac`, `--wasm` and `--dos`: a library is compiled for no target in
-particular, so one build of it serves them all.
+Change the library and build the program again: bflat runs again, because the library's `.dll` is one
+of the program's inputs. A library is compiled for no target in particular, so the same `.dll` serves
+every `ZeroTarget`.
+
+## Share it as a package
+
+`dotnet pack` puts the `.dll` in a NuGet package. Package ids are shared by everyone on nuget.org
+(there is already an unrelated `Geometry`), so give yours a prefix of your own in the project file,
+`<PackageId>Acme.Geometry</PackageId>`, then:
+
+```bash
+dotnet pack Geometry -o feed
+```
+
+The package holds `lib/zero01/Geometry.dll`. Publish it to nuget.org, or to a folder that a
+`nuget.config` lists, and programs reference it like any package:
+
+```xml
+<ItemGroup>
+  <PackageReference Include="Acme.Geometry" Version="1.0.0" />
+</ItemGroup>
+```
+
+`zero01` is the target framework of every project made with version 0.1 of the SDK. It does two
+things. NuGet won't add an ordinary .NET package to a zero project, because such a package is built for
+.NET's libraries, which a zero program doesn't have:
+
+```text
+error NU1202: Package Newtonsoft.Json 13.0.3 is not compatible with zero01 (zero01,Version=v0.0).
+```
+
+And a zero library built with another version of the SDK (whose zerocore may differ) is refused the
+same way, naming both versions:
+
+```text
+error NU1202: Package Acme.Geometry 1.0.0 is not compatible with zero01 (zero01,Version=v0.0).
+Package Acme.Geometry 1.0.0 supports: zero02 (zero02,Version=v0.0)
+```
+
+Rebuild the library with your SDK version, or build the program with the library's.
 
 ## How it's built
 
-`build.sh` runs bflat twice. First it compiles the library's sources to an IL assembly, against
-zerocore and `lib/`:
-
-```bash
-bflat build-il libs/Geometry/*.cs -O --target Shared --stdlib:none \
-    -r bin/System.Private.CoreLib.dll -r bin/BflatLib.dll \
-    --langversion preview --compiler-feature updated-memory-safety-rules \
-    -o bin/libs/Geometry.dll
-```
-
-Then each program's build references it with `-r bin/libs/Geometry.dll`. The assembly holds IL, not
-machine code, and its metadata takes the place of a C header. The program's build compiles the
-library's code together with the program's own, for the program's target and `-m` flags, and leaves
-out whatever the program doesn't call. A program that uses one function of a large library gets that
-function and what it calls.
-
-`-O` matters: `build-il` doesn't optimize unless asked, and the program's build starts from the IL it
-is given.
+The library's build is the C# compiler's, against zerocore and `lib/` instead of .NET's libraries; its
+output is IL, not machine code, and its metadata takes the place of a C header. The program's build
+gives that `.dll` to bflat with `-r`. bflat compiles the library's code together with the program's
+own, for the program's target and `-m` flags, and leaves out whatever the program doesn't call: a
+program that uses one function of a large library gets that function and what it calls.
 
 ## Design the library for zero mode
 
@@ -172,20 +221,33 @@ as usual. A program has no other copy of the library to share them with.
 
 ## Use one library from another
 
-`build.sh` builds the folders in `libs/` in name order, and each can use the ones before it. A
-`libs/Plots` could use `libs/Geometry`, but not the other way round. If two libraries need each
-other, they are one library: merge the folders.
+A library references another the same way a program does, with `<ProjectReference>` or
+`<PackageReference>`. References can't go in a circle: if two libraries need each other, they are one
+library.
 
-## Share a library
+## In this repository
 
-The simplest way to share a library is as source: copy its folder into another checkout's `libs/`.
+Working in a clone of this repository, without the SDK, `build.sh` has its own convention: each folder
+in `libs/` is a library. `build.sh` compiles each into `bin/libs/<folder>.dll`, in name order (so each
+can use the ones before it), and every sample references all of them:
 
-The `.dll` can be shared too, but it refers to zerocore and `lib/` by name and expects the members it
-was built against. Rebuild it whenever either changes, and build programs against the same zerocore
-and `lib/` it was built with.
+```bash
+bflat build-il libs/Geometry/*.cs -O --target Shared --stdlib:none \
+    -r bin/System.Private.CoreLib.dll -r bin/BflatLib.dll \
+    --langversion preview --compiler-feature updated-memory-safety-rules \
+    -o bin/libs/Geometry.dll
+```
+
+`-O` matters there: `build-il` doesn't optimize unless asked. `samples/Shapes.cs` uses
+`libs/Geometry` this way, on every target `build.sh` knows, macOS, WebAssembly and DOS included:
+
+```bash
+./build.sh Shapes
+./run.sh Shapes
+```
 
 ## What a library isn't
 
 A library is compiled into each program that uses it. It isn't loaded at run time: there's no runtime
-to load it into, and `build.sh` doesn't build native shared libraries (`.so`, `.dylib`, `.dll`) for C
-programs to call.
+to load it into, and neither the SDK nor `build.sh` builds native shared libraries (`.so`, `.dylib`,
+`.dll`) for C programs to call.

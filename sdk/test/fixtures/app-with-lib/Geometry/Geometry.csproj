@@ -1,0 +1,7 @@
+<Project Sdk="ZeroCSharp.Sdk/@ZERO_SDK_VERSION@">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <Version>1.0.0</Version>
+    <PackageId>ZeroTest.Geometry</PackageId>
+  </PropertyGroup>
+</Project>

@@ -6,6 +6,8 @@ Exploring [bflat](https://flattened.net/)'s zero mode: C# compiled to tiny nativ
 
 **Zero mode is essentially "C with proper generics"**: C#'s syntax, type safety, and generics with C-like binary sizes (16-160 KB).
 
+**Without cloning:** on Linux with the .NET 10 SDK, `dotnet new install ZeroCSharp.Templates`, `dotnet new zero -o Hello`, `cd Hello && dotnet build` makes a native program; `-p:ZeroTarget=win-x64` makes a Windows one. The packages are built from [`sdk/`](sdk/); see [Install with dotnet](https://onurgumus.github.io/zero-csharp/get-started/install-with-dotnet.html).
+
 **Documentation:** <https://onurgumus.github.io/zero-csharp/>, a guide to installing the fork, a tutorial, concepts, task guides and a reference for `lib/`. Its source is in `docs/`; build it with `dotnet tool restore && python3 scripts/build-docs.py` (needs .NET 10, Python 3 and Node), then `python3 -m http.server -d output`.
 
 The samples don't use bflat's built-in zero-mode library (`--stdlib:zero`, zerolib). They use [`zerocore/`](zerocore/README.md), an MIT-licensed core library in this repo that `build.sh` compiles from source, so nothing AGPL-licensed is linked into the binaries (see [Core library](#core-library)).
@@ -34,7 +36,7 @@ Prerequisites:
 
 - **The bflat fork** (see below). By default `../bflat/layouts/linux-glibc-<arch>`; override with `BFLAT_DIR`.
 - **macOS:** Docker. bflat is a Linux program, so it runs in a Linux container of your Mac's own architecture (native on Apple Silicon). By default the samples are Linux programs that run in that container too; `./build.sh --mac` builds macOS programs instead (see [macOS](#macos)), which also needs Xcode or its command line tools.
-- **Linux:** `libtinfo.so.5`, which bflat's bundled linker needs, and an assembler (`as`, from binutils) for zerocore's assembly routines. On Ubuntu 22.04: `sudo apt install libtinfo5 binutils`. Ubuntu 24.04 no longer ships libtinfo5. Cross-compiling needs the target's assembler too (`binutils-x86-64-linux-gnu` or `binutils-aarch64-linux-gnu`).
+- **Linux:** an assembler (`as`, from binutils) for zerocore's assembly routines: `sudo apt install binutils`. bflat's linker needs nothing else (layouts built before the fork switched to LLVM 20's lld, on 2026-11-21, need `libtinfo.so.5`: rebuild them). Cross-compiling needs the target's assembler too (`binutils-x86-64-linux-gnu` or `binutils-aarch64-linux-gnu`).
 
 Windows programs: `./build.sh --win` builds every sample as a 64-bit Windows program (see [Windows](#windows)). Building *on* Windows is another matter: `.\setup.ps1` and `.\build.ps1` use the fork's `windows-x64` layout but are **untested**, and still build against zerolib rather than zerocore.
 
@@ -406,6 +408,6 @@ With bflat's zerolib (`--stdlib:zero`), for reference; the fork fixes most of th
 
 ## License
 
-MIT, including `zerocore/` (see [`zerocore/LICENSE`](zerocore/LICENSE)). zerocore's README explains where its code comes from and carries a caveat: it wasn't written in a clean room, so have it reviewed before shipping a commercial product on it.
+MIT ([`LICENSE`](LICENSE)), including `zerocore/` (see [`zerocore/LICENSE`](zerocore/LICENSE)) and the `ZeroCSharp.Sdk` and `ZeroCSharp.Templates` packages. zerocore's README explains where its code comes from and carries a caveat: it wasn't written in a clean room, so have it reviewed before shipping a commercial product on it.
 
-bflat and the fork are AGPL-3.0. `build.sh` uses them as a compiler; their zerolib is not linked into the binaries it produces. Each binary does link the C library of the system it targets (glibc on Linux, WASI's libc on WebAssembly), under its own license.
+bflat and the fork are AGPL-3.0, and so are the `ZeroCSharp.Bflat.*` packages that carry it; the SDK downloads them as a tool, and nothing from them is linked into programs. `build.sh` uses them as a compiler; their zerolib is not linked into the binaries it produces. Each binary does link the C library of the system it targets (glibc on Linux, WASI's libc on WebAssembly), under its own license.

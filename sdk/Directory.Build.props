@@ -1,0 +1,4 @@
+<!-- Stops MSBuild from applying the repository's Directory.Build.props (editor
+     support for samples/) to the packages and test projects here: they must
+     build as a user's project would, with nothing around it. -->
+<Project />

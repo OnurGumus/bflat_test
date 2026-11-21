@@ -80,10 +80,9 @@ jobs:
       matrix:
         include:
           - arch: x64
-            runner: ubuntu-22.04
+            runner: ubuntu-24.04
           - arch: arm64
-            runner: ubuntu-22.04-arm
-    # 22.04: bflat's bundled linker needs libtinfo5, which 24.04 doesn't ship.
+            runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -97,7 +96,7 @@ jobs:
           key: ${{ needs.bflat.outputs.key }}
           fail-on-cache-miss: true
       - name: Install what bflat and the build need
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libtinfo5 binutils
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends binutils
       - name: Test
         working-directory: zero-csharp
         env:
@@ -120,7 +119,7 @@ jobs:
           fail-on-cache-miss: true
       - name: Install what bflat and the build need
         # clang compiles win/runtime.c and the assembly for Windows.
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libtinfo5 binutils clang
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends binutils clang
       - name: Test under Wine
         working-directory: zero-csharp
         env:
@@ -143,8 +142,6 @@ jobs:
             bflat/layouts/linux-glibc-arm64
           key: ${{ needs.bflat.outputs.key }}
           fail-on-cache-miss: true
-      - name: Install what bflat needs
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libtinfo5
       - name: Compile for macOS
         working-directory: zero-csharp
         env:
@@ -193,7 +190,7 @@ jobs:
           path: zero-csharp/tools/wasm
           key: wasm-tools-${{ hashFiles('zero-csharp/env.sh') }}
       - name: Install what bflat and the build need
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libtinfo5 binutils
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends binutils
       - name: Download the WebAssembly tools
         if: steps.wasm-tools.outputs.cache-hit != 'true'
         working-directory: zero-csharp
